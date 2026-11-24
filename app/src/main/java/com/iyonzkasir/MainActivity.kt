@@ -1,324 +1,279 @@
 package com.iyonzkasir
 
 import android.app.Application
+import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.navigation.NavHostController
-import androidx.navigation.compose.NavHost
-import androidx.navigation.compose.composable
-import androidx.navigation.compose.currentBackStackEntryAsState
-import androidx.navigation.compose.rememberNavController
-import com.iyonzkasir.data.*
-import com.iyonzkasir.ui.*
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.navigation.NavType
+import androidx.navigation.compose.*
+import androidx.navigation.navArgument
+import com.iyonzkasir.core.*
+import com.iyonzkasir.data.local.OrderEntity
+import com.iyonzkasir.di.AppContainer
+import com.iyonzkasir.hardware.ThermalPrinter
+import com.iyonzkasir.ui.activity.*
+import com.iyonzkasir.ui.auth.*
+import com.iyonzkasir.ui.home.HomeV2Screen
+import com.iyonzkasir.ui.manage.*
+import com.iyonzkasir.ui.pos.*
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
-// ═══════════════════════════════════════════════════════════
-// APPLICATION
-// ═══════════════════════════════════════════════════════════
 class IyonzApp : Application() {
-    val database: AppDatabase by lazy { AppDatabase.get(this) }
-
-    val userRepo: UserRepository by lazy {
-        UserRepository(database.userDao(), database.permissionDao(), database.auditDao())
-    }
-    val settingRepo: SettingRepository by lazy { SettingRepository(database.settingDao()) }
-    val featureRepo: FeatureRepository by lazy { FeatureRepository(database.featureDao()) }
-    val kategoriRepo: KategoriRepository by lazy { KategoriRepository(database.kategoriDao()) }
-    val expenseRepo: ExpenseRepository by lazy {
-        ExpenseRepository(database.expenseCategoryDao(), database.expenseDao())
-    }
-    val posRepo: PosRepository by lazy {
-        PosRepository(database.menuDao(), database.orderDao(), database.shiftDao())
-    }
-    val stockRepo: StockRepository by lazy {
-        StockRepository(database.menuDao(), database.stockDao(), userRepo)
-    }
-    val shiftRepo: ShiftRepository by lazy {
-        ShiftRepository(database.shiftDao(), database.orderDao())
-    }
-    val crmRepo: CrmRepository by lazy {
-        CrmRepository(database.memberDao(), database.voucherDao(), database.memberTxDao())
-    }
-    val bundleRepo: MenuBundleRepository by lazy {
-        MenuBundleRepository(database.menuBundleDao())
-    }
+    val container: AppContainer by lazy { AppContainer(this) }
 }
 
-// ═══════════════════════════════════════════════════════════
-// SESSION
-// ═══════════════════════════════════════════════════════════
-object Session {
-    private val _current = mutableStateOf<User?>(null)
-    val current: User? get() = _current.value
-    val currentState: State<User?> get() = _current
-
-    private val _permissions = mutableStateOf<Set<PermissionKey>>(emptySet())
-    val permissions: Set<PermissionKey> get() = _permissions.value
-    val permissionsState: State<Set<PermissionKey>> get() = _permissions
-
-    fun login(user: User, perms: Set<PermissionKey>) {
-        _current.value = user; _permissions.value = perms
-    }
-    fun logout() { _current.value = null; _permissions.value = emptySet() }
-    fun isOwner() = _current.value?.role == UserRole.OWNER.id
-
-    fun can(p: PermissionKey): Boolean {
-        val u = _current.value ?: return false
-        if (u.role == UserRole.OWNER.id) return true
-        return p in _permissions.value
-    }
-    fun updatePermissions(perms: Set<PermissionKey>) { _permissions.value = perms }
-}
-
-// ═══════════════════════════════════════════════════════════
-// ROUTES
-// ═══════════════════════════════════════════════════════════
-object Routes {
-    const val SPLASH = "splash"
-    const val ONBOARDING = "onboarding"
-    const val LOGIN = "login"
-    const val MAIN = "main"
-
-    // Bottom Nav Tabs (5)
-    const val TAB_HOME = "tab_home"
-    const val TAB_POS = "tab_pos"
-    const val TAB_INVENTARIS = "tab_inventaris"
-    const val TAB_DASHBOARD = "tab_dashboard"
-    const val TAB_SETTINGS = "tab_settings"
-
-    // Akses via Home shortcut
-    const val TAB_MENU = "tab_menu"
-    const val TAB_OPEN_BILL = "tab_openbill"
-    const val TAB_RIWAYAT = "tab_riwayat"
-    const val TAB_SHIFT = "tab_shift"
-
-    // Fullscreen
-    const val KERANJANG = "keranjang"
-    const val BAYAR = "bayar"
-    const val EDIT_MENU = "edit_menu"
-    const val KELOLA_USER = "kelola_user"
-    const val FEATURE_TOGGLE = "feature_toggle"
-    const val PROFIL_TOKO = "profil_toko"
-    const val TEMA = "tema"
-    const val TEMA_WARNA = "tema_warna"
-    const val PRINTER = "printer"
-    const val TEMPLATE_STRUK = "template_struk"
-    const val LAPORAN = "laporan"
-    const val BACKUP = "backup"
-    const val CRM = "crm"
-    const val INVENTARIS = "inventaris"
-    const val KATEGORI = "kategori"
-    const val KEUANGAN = "keuangan"
-    const val BARCODE_INFO = "barcode_info"
-    const val PENGELUARAN = "pengeluaran"
-    const val ANTRIAN = "antrian"
-    const val TENTANG = "tentang"
-
-    // Bundle / Paket
-    const val BUNDLING = "bundling"
-    const val BUNDLING_EDIT = "bundling_edit"
-
-    // Sync Web (BARU)
-    const val SYNC_WEB = "sync_web"
-}
-
-// ═══════════════════════════════════════════════════════════
-// MAIN ACTIVITY
-// ═══════════════════════════════════════════════════════════
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val app = application as IyonzApp
-        setContent { IyonzTheme { AppRoot(app) } }
+        val container = (application as IyonzApp).container
+        setContent { IyonzAppTheme { IyonzRoot(container) } }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        if (isFinishing) ThermalPrinter.disconnect()
     }
 }
 
 @Composable
-fun AppRoot(app: IyonzApp) {
+fun IyonzRoot(app: AppContainer) {
     val nav = rememberNavController()
-    var loaded by remember { mutableStateOf(false) }
+    var ready by remember { mutableStateOf(false) }
+    var startDest by remember { mutableStateOf("auth") }
+    var showRestore by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
-        // Load tema warna brand dari DB
-        try {
-            val theme = app.settingRepo.getAppTheme()
-            ThemeManager.updateAppTheme(theme)
-        } catch (_: Exception) {}
-
-        // Load tema mode (gelap/terang)
-        ThemeManager.update(app.settingRepo.getThemeMode())
-
-        // Init feature toggle
-        app.featureRepo.ensureInitialized()
-
-        // Init auto backup
-        BackupScheduler.scheduleDaily(app)
-        BackupNotifier.maybeRemind(app, app.settingRepo)
-
-        loaded = true
+        app.loadInitialPreferences()
+        val hasBiz = SessionManager.businessId.isNotBlank() && app.gateway.currentOwnerUid() != null
+        startDest = if (hasBiz) "pin" else "auth"
+        ready = true
     }
 
-    // Tunggu theme loading selesai biar warna konsisten
-    if (!loaded) {
-        IyonzTheme {
-            Surface(
-                color = MaterialTheme.colorScheme.background,
-                modifier = Modifier.fillMaxSize()
-            ) {}
-        }
+    if (!ready) {
+        Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {}
         return
     }
 
-    NavHost(navController = nav, startDestination = Routes.SPLASH) {
-        composable(Routes.SPLASH) {
-            SplashScreen(app.settingRepo, app.userRepo,
-                onNeedOnboarding = {
-                    nav.navigate(Routes.ONBOARDING) {
-                        popUpTo(Routes.SPLASH) { inclusive = true }
-                    }
+    NavHost(navController = nav, startDestination = startDest) {
+        composable("auth") {
+            AuthEntryScreen(
+                app = app,
+                onAuthenticated = { isNew ->
+                    if (isNew) nav.navigate("main") { popUpTo(0) { inclusive = true } }
+                    else nav.navigate("device_outlet") { popUpTo("auth") { inclusive = true } }
                 },
-                onNeedLogin = {
-                    nav.navigate(Routes.LOGIN) {
-                        popUpTo(Routes.SPLASH) { inclusive = true }
-                    }
-                })
-        }
-        composable(Routes.ONBOARDING) {
-            OnboardingScreen(app) {
-                nav.navigate(Routes.LOGIN) {
-                    popUpTo(Routes.ONBOARDING) { inclusive = true }
-                }
-            }
-        }
-        composable(Routes.LOGIN) {
-            LoginScreen(app.userRepo) { user, perms ->
-                Session.login(user, perms)
-                nav.navigate(Routes.MAIN) {
-                    popUpTo(Routes.LOGIN) { inclusive = true }
-                }
-            }
-        }
-        composable(Routes.MAIN) { MainShell(app, nav) }
-
-        // Fullscreen routes
-        composable(Routes.KERANJANG) { KeranjangRoute(app, nav) }
-        composable(Routes.BAYAR) { BayarRoute(app, nav) }
-        composable(Routes.EDIT_MENU) { EditMenuRoute(app, nav, null) }
-        composable("${Routes.EDIT_MENU}/{id}") { entry ->
-            EditMenuRoute(app, nav, entry.arguments?.getString("id")?.toLongOrNull())
-        }
-        composable(Routes.KELOLA_USER) { KelolaUserRoute(app, nav) }
-        composable(Routes.FEATURE_TOGGLE) { FeatureToggleRoute(app, nav) }
-        composable(Routes.PROFIL_TOKO) { ProfilTokoRoute(app, nav) }
-        composable(Routes.TEMA) { TemaRoute(app, nav) }
-        composable(Routes.TEMA_WARNA) { TemaWarnaRoute(app, nav) }
-        composable(Routes.PRINTER) { PrinterRoute(app, nav) }
-        composable(Routes.TEMPLATE_STRUK) { TemplateStrukRoute(app, nav) }
-        composable(Routes.LAPORAN) { LaporanRoute(app, nav) }
-        composable(Routes.BACKUP) { BackupRoute(app, nav) }
-        composable(Routes.CRM) { CrmRoute(app, nav) }
-        composable(Routes.INVENTARIS) { InventarisRoute(app, nav) }
-        composable(Routes.KATEGORI) { KategoriRoute(app, nav) }
-        composable(Routes.KEUANGAN) { KeuanganRoute(app, nav) }
-        composable(Routes.BARCODE_INFO) { BarcodeInfoRoute(app, nav) }
-        composable(Routes.PENGELUARAN) { PengeluaranRoute(app, nav) }
-        composable(Routes.ANTRIAN) { AntrianRoute(app, nav) }
-        composable(Routes.TENTANG) { TentangRoute(nav) }
-
-        // ── Bundle routes ──
-        composable(Routes.BUNDLING) { BundlingRoute(app, nav) }
-        composable("${Routes.BUNDLING_EDIT}/{id}") { entry ->
-            BundlingEditRoute(
-                app, nav,
-                entry.arguments?.getString("id")?.toLongOrNull()
+                onOpenRestore = { showRestore = true }
             )
         }
-
-        // ── Sync Web Route (BARU) ──
-        composable(Routes.SYNC_WEB) { SyncWebRoute(app, nav) }
+        composable("device_outlet") {
+            DeviceOutletPickerScreen(app) {
+                nav.navigate("pin") { popUpTo("device_outlet") { inclusive = true } }
+            }
+        }
+        composable("pin") {
+            StaffPinScreen(app) {
+                nav.navigate("main") { popUpTo(0) { inclusive = true } }
+            }
+        }
+        composable("main") {
+            MainShell(
+                app = app,
+                onSwitchUser = {
+                    app.stopRealtimeListeners()
+                    nav.navigate("pin") { popUpTo(0) { inclusive = true } }
+                },
+                onLogoutBusiness = {
+                    nav.navigate("auth") { popUpTo(0) { inclusive = true } }
+                }
+            )
+        }
     }
+
+    if (showRestore) RestoreFromAuthDialog { showRestore = false }
 }
 
-// ═══════════════════════════════════════════════════════════
-// MAIN SHELL
-// ═══════════════════════════════════════════════════════════
-private data class NavTab(
-    val route: String, val label: String, val icon: ImageVector,
-    val feature: FeatureKey? = null,
-    val permission: PermissionKey? = null
-)
-
 @Composable
-fun MainShell(app: IyonzApp, nav: NavHostController) {
-    val innerNav = rememberNavController()
-    val enabledFeatures by FeatureManager.enabled.collectAsState()
-
-    val allTabs = listOf(
-        NavTab(Routes.TAB_HOME, "Home", Icons.Default.Home),
-        NavTab(Routes.TAB_POS, "Kasir", Icons.Default.PointOfSale,
-            permission = PermissionKey.JUAL),
-        NavTab(Routes.TAB_INVENTARIS, "Stok", Icons.Default.Inventory,
-            feature = FeatureKey.LOW_STOCK_ALERT, permission = PermissionKey.LIHAT_STOK),
-        NavTab(Routes.TAB_DASHBOARD, "Laporan", Icons.Default.BarChart,
-            feature = FeatureKey.LAPORAN_HARIAN, permission = PermissionKey.LIHAT_DASHBOARD),
-        NavTab(Routes.TAB_SETTINGS, "Setelan", Icons.Default.Settings)
-    )
-
-    val visibleTabs = allTabs.filter { tab ->
-        val featOk = tab.feature == null || tab.feature in enabledFeatures
-        val permOk = tab.permission == null || Session.can(tab.permission)
-        featOk && permOk
+private fun RestoreFromAuthDialog(onDismiss: () -> Unit) {
+    val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var pickedUri by remember { mutableStateOf<Uri?>(null) }
+    var pwd by remember { mutableStateOf("") }
+    var msg by remember { mutableStateOf<String?>(null) }
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) pickedUri = uri
     }
 
-    val innerBackStack by innerNav.currentBackStackEntryAsState()
-    val currentRoute = innerBackStack?.destination?.route
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Pulihkan Backup (.iyonz)") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(AppSp.sm)) {
+                OutlinedButton(onClick = { picker.launch(arrayOf("*/*")) }, modifier = Modifier.fillMaxWidth()) {
+                    Text(if (pickedUri == null) "Pilih File Backup" else "File Dipilih ✓")
+                }
+                if (pickedUri != null) {
+                    OutlinedTextField(pwd, { pwd = it }, label = { Text("Password Backup") },
+                        visualTransformation = PasswordVisualTransformation(), singleLine = true)
+                }
+                msg?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = AppColors.brand) }
+            }
+        },
+        confirmButton = {
+            TextButton(enabled = pickedUri != null && pwd.length >= 6, onClick = {
+                scope.launch {
+                    val res = ctx.contentResolver.openInputStream(pickedUri!!)?.use {
+                        V2BackupHelper.restore(ctx, pwd, it)
+                    } ?: Result.failure(Exception("Gagal membuka file"))
+                    if (res.isSuccess) {
+                        msg = "✅ Berhasil! Memulai ulang..."
+                        delay(800); V2BackupHelper.restartApp(ctx)
+                    } else msg = "❌ ${res.exceptionOrNull()?.message}"
+                }
+            }) { Text("Pulihkan") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Batal") } }
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun MainShell(app: AppContainer, onSwitchUser: () -> Unit, onLogoutBusiness: () -> Unit) {
+    val ctx = LocalContext.current
+    val user by SessionManager.userState
+    val shellNav = rememberNavController()
+    val posController = remember(app) { PosV2Controller(app) }
+    var lastPaidOrder by remember { mutableStateOf<OrderEntity?>(null) }
+    var activitySection by remember { mutableStateOf<ActivitySection?>(null) }
+
+    LaunchedEffect(Unit) { app.startRealtimeListeners(); app.triggerSyncInBackground() }
+    LaunchedEffect(user) { if (user == null) onSwitchUser() }
+
+    val canHome = SessionManager.can(AppAccess.HOME)
+    val canPos = SessionManager.can(AppAccess.POS)
+    val canAct = SessionManager.canAny(AppAccess.KITCHEN, AppAccess.ORDERS, AppAccess.KASBON, AppAccess.WEB_ORDERS)
+    val canManage = SessionManager.canAny(
+        AppAccess.MENU_MGMT, AppAccess.STOCK, AppAccess.EXPENSE, AppAccess.REPORT,
+        AppAccess.SHIFT, AppAccess.MANAGE_TEAM, AppAccess.WEB_ORDERS, AppAccess.SETTINGS
+    ) || SessionManager.isOwner()
+
+    val startTab = when {
+        canHome -> "tab_home"
+        canPos -> "tab_pos"
+        canAct -> "tab_activity"
+        else -> "tab_manage"
+    }
+    val tabRoutes = setOf("tab_home", "tab_pos", "tab_activity", "tab_manage")
+    val backStack by shellNav.currentBackStackEntryAsState()
+    val curRoute = backStack?.destination?.route
+    val pendingWeb by app.orderRepo.observePendingWebCount(SessionManager.viewingOutletId.ifBlank { "ALL" }).collectAsState(initial = 0)
 
     Scaffold(
+        topBar = {
+            if (!canHome && !canManage && curRoute in tabRoutes) {
+                TopAppBar(
+                    title = { Text(user?.name ?: "iyonzkasir") },
+                    actions = {
+                        TextButton(onClick = { SessionManager.logoutStaff(ctx); onSwitchUser() }) { Text("Ganti Akun") }
+                    }
+                )
+            }
+        },
         bottomBar = {
-            NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
-                visibleTabs.forEach { t ->
-                    NavigationBarItem(
-                        selected = currentRoute == t.route,
-                        onClick = {
-                            innerNav.navigate(t.route) {
-                                popUpTo(innerNav.graph.startDestinationId) { saveState = true }
-                                launchSingleTop = true
-                                restoreState = true
+            if (curRoute in tabRoutes) {
+                NavigationBar(containerColor = AppColors.card) {
+                    if (canHome) NavigationBarItem(selected = curRoute == "tab_home", onClick = { shellNav.navigate("tab_home") { popUpTo(startTab); launchSingleTop = true } },
+                        icon = { Icon(Icons.Default.Home, null) }, label = { Text("Beranda") })
+                    if (canPos) NavigationBarItem(selected = curRoute == "tab_pos", onClick = { shellNav.navigate("tab_pos") { popUpTo(startTab); launchSingleTop = true } },
+                        icon = { Icon(Icons.Default.PointOfSale, null) }, label = { Text("Kasir") })
+                    if (canAct) NavigationBarItem(selected = curRoute == "tab_activity", onClick = { activitySection = null; shellNav.navigate("tab_activity") { popUpTo(startTab); launchSingleTop = true } },
+                        icon = {
+                            BadgedBox(badge = { if (pendingWeb > 0 && SessionManager.can(AppAccess.WEB_ORDERS)) Badge { Text("$pendingWeb") } }) {
+                                Icon(Icons.Default.ReceiptLong, null)
                             }
-                        },
-                        icon = { Icon(t.icon, null) },
-                        label = { Text(t.label,
-                            style = MaterialTheme.typography.labelSmall) },
-                        colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = BRAND,
-                            selectedTextColor = BRAND,
-                            indicatorColor = BRAND_LIGHT
-                        )
-                    )
+                        }, label = { Text("Aktivitas") })
+                    if (canManage) NavigationBarItem(selected = curRoute == "tab_manage", onClick = { shellNav.navigate("tab_manage") { popUpTo(startTab); launchSingleTop = true } },
+                        icon = { Icon(Icons.Default.Tune, null) }, label = { Text("Kelola") })
                 }
             }
         }
     ) { pad ->
-        NavHost(innerNav, startDestination = Routes.TAB_HOME,
-            modifier = Modifier.padding(pad)) {
-            composable(Routes.TAB_HOME) { HomeRoute(app, nav, innerNav) }
-            composable(Routes.TAB_POS) { PosRoute(app, nav, innerNav) }
-            composable(Routes.TAB_INVENTARIS) { InventarisRoute(app, nav) }
-            composable(Routes.TAB_DASHBOARD) { DashboardRoute(app) }
-            composable(Routes.TAB_SETTINGS) { SettingsRoute(app, nav) }
-
-            composable(Routes.TAB_MENU) { MenuRoute(app, nav, innerNav) }
-            composable(Routes.TAB_OPEN_BILL) { OpenBillRoute(app, nav, innerNav) }
-            composable(Routes.TAB_RIWAYAT) { RiwayatRoute(app) }
-            composable(Routes.TAB_SHIFT) { ShiftRoute(app) }
+        NavHost(shellNav, startDestination = startTab, modifier = Modifier.padding(pad)) {
+            composable("tab_home") {
+                HomeV2Screen(
+                    app = app,
+                    onOpenPos = { shellNav.navigate("tab_pos") { popUpTo(startTab); launchSingleTop = true } },
+                    onOpenKitchen = { activitySection = ActivitySection.KITCHEN; shellNav.navigate("tab_activity") { popUpTo(startTab); launchSingleTop = true } },
+                    onOpenExpense = { shellNav.navigate("manage_expense") },
+                    onOpenKasbon = { activitySection = ActivitySection.KASBON; shellNav.navigate("tab_activity") { popUpTo(startTab); launchSingleTop = true } },
+                    onOpenWebOrders = { activitySection = ActivitySection.WEB; shellNav.navigate("tab_activity") { popUpTo(startTab); launchSingleTop = true } },
+                    onOpenReport = { shellNav.navigate("manage_report") },
+                    onSwitchUser = { SessionManager.logoutStaff(ctx); onSwitchUser() }
+                )
+            }
+            composable("tab_pos") {
+                PosV2Screen(app, posController, onOpenCart = { shellNav.navigate("pos_checkout") })
+            }
+            composable("tab_activity") {
+                ActivityHubV2Screen(app, initialSection = activitySection) { orderId ->
+                    posController.loadOpenBill(orderId); shellNav.navigate("pos_checkout")
+                }
+            }
+            composable("tab_manage") {
+                ManageHubV2Screen(
+                    app = app,
+                    onOpenCatalog = { tab -> shellNav.navigate("manage_catalog/$tab") },
+                    onOpenBundles = { shellNav.navigate("manage_bundles") },
+                    onOpenExpense = { shellNav.navigate("manage_expense") },
+                    onOpenReport = { shellNav.navigate("manage_report") },
+                    onOpenShift = { shellNav.navigate("manage_shift") },
+                    onOpenTeam = { shellNav.navigate("manage_team") },
+                    onOpenWebStore = { shellNav.navigate("manage_web_store") },
+                    onOpenPrinter = { shellNav.navigate("manage_printer") },
+                    onOpenThemeBackup = { shellNav.navigate("manage_theme_backup") },
+                    onOpenAudit = { shellNav.navigate("manage_audit") },
+                    onSwitchUser = { SessionManager.logoutStaff(ctx); onSwitchUser() },
+                    onLogoutBusiness = onLogoutBusiness
+                )
+            }
+            composable("pos_checkout") {
+                PosCheckoutScreen(
+                    app = app, controller = posController,
+                    onBack = { shellNav.popBackStack() },
+                    onPaid = { order ->
+                        lastPaidOrder = order
+                        shellNav.navigate("pos_success") { popUpTo("pos_checkout") { inclusive = true } }
+                    },
+                    onSavedOpenBill = { shellNav.popBackStack() }
+                )
+            }
+            composable("pos_success") {
+                val order = lastPaidOrder
+                if (order != null) OrderSuccessV2Screen(app, order) { shellNav.popBackStack() }
+            }
+            composable("manage_catalog/{tab}", arguments = listOf(navArgument("tab") { type = NavType.IntType })) { e ->
+                CatalogManageV2Screen(app, e.arguments?.getInt("tab") ?: 0) { shellNav.popBackStack() }
+            }
+            composable("manage_bundles") { BundleManageV2Screen(app) { shellNav.popBackStack() } }
+            composable("manage_expense") { ExpenseV2Screen(app) { shellNav.popBackStack() } }
+            composable("manage_report") { ReportV2Screen(app) { shellNav.popBackStack() } }
+            composable("manage_shift") { ShiftV2Screen(app) { shellNav.popBackStack() } }
+            composable("manage_team") { TeamManageV2Screen(app) { shellNav.popBackStack() } }
+            composable("manage_web_store") { WebStoreV2Screen(app) { shellNav.popBackStack() } }
+            composable("manage_printer") { PrinterAndReceiptV2Screen(app) { shellNav.popBackStack() } }
+            composable("manage_theme_backup") { ThemeAndBackupV2Screen(app) { shellNav.popBackStack() } }
+            composable("manage_audit") { AuditLogV2Screen(app) { shellNav.popBackStack() } }
         }
     }
 }
