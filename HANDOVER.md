@@ -1,30 +1,44 @@
-# HANDOVER PROYEK: iyonzkasir v2.0 (Rombak Total Siap Launch)
+# HANDOVER PROYEK: iyonzkasir v2.0
 
-## 1. Visi & Alur Produk
-- Target: UMKM, warung, gerobakan, hingga **Owner multi-cabang/multi-gerobak**.
-- Arsitektur: **Offline-First (Room SQLite UUID) + Auto Cloud Sync (Firebase Firestore & Auth)**.
-- Auth 2 Lapis:
-  1. Owner daftar/login pakai **Email + Password** di HP (otomatis terbuat 1 Usaha + Cabang Utama). Di HP cabang, Owner login sekali lalu pilih HP itu untuk cabang mana.
-  2. Jika Owner kerja sendiri (belum ada karyawan): langsung masuk tanpa layar PIN. Jika sudah ada karyawan: muncul layar pilih nama + **PIN 4–6 digit** (anti-bruteforce lockout 30 detik).
-- **Karyawan 100% Custom Akses (`AppAccess`):** Nama & jabatan bebas ketik (Kasir, Dapur 1, Dapur 2, Admin, dll.), izin ditentukan murni lewat checklist halaman & tindakan khusus (termasuk memisah izin "Lihat Modal HPP & Untung Bersih").
-- **Web Menu Digital (`web/index.html`):** Support QR meja (`?store=...&meja=...`), Paket Bundling, cek stok, order masuk real-time ke tab Pesanan Web di kasir + WhatsApp.
+## 1. Ringkasan Produk & Arsitektur
+- **Repo aktif:** `Mrunited22/Kasirkubaru` (`main`)
+- **Target:** UMKM, warung, gerobakan, hingga Owner multi-cabang/multi-gerobak.
+- **Arsitektur:** Offline-First (Room SQLite UUID `IyonzDatabase`) + Auto Cloud Sync (`FirebaseAuth` & `Firestore`).
+- **Auth 2 Lapis:**
+  1. Owner daftar/login Email + Password di HP (`AuthEntryScreen`), lalu pilih perangkat untuk Owner atau cabang tertentu (`DeviceOutletPickerScreen`).
+  2. Jika belum ada karyawan aktif: otomatis masuk. Jika ada karyawan: muncul layar pilih nama + PIN 4–6 digit dengan lockout 30 detik (`StaffPinScreen`).
+- **Karyawan 100% Custom Akses (`AppAccess`):** Nama & jabatan bebas ketik, izin diatur lewat checklist halaman & tindakan khusus (termasuk pisah izin lihat HPP/untung bersih).
+- **Foto Cloud:** Kompresi Data URI ~20KB (`ImageHelper`) agar gratis di Firebase Spark tanpa ImgBB.
 
-## 2. Lingkungan Build & Aturan Penting
-- Edit lewat **GitHub Codespaces terminal di HP**; build via **GitHub Actions** (file `.github/workflows/android-build.yml`).
-- **ATURAN PASTE:** Terminal HP macet jika paste >120 baris sekaligus. Selalu pecah per ~80–100 baris (`>` lalu `>>`) dan kirim 1 sub-fase per giliran chat.
-- Stack terpasang & hijau di CI: `compileSdk = 36`, `targetSdk = 36`, `minSdk = 24`, AGP `8.9.1`, Gradle `8.14.3`, JDK `17`, Kotlin `2.0.20`, KSP `2.0.20-1.0.25`, CameraX `1.4.2` + ML Kit `17.3.0`.
-- Foto web dikompres kecil ~20KB Data URI via `ImageHelper` agar gratis di Firebase Spark (tanpa ImgBB API key).
+## 2. Aturan Build & Terminal
+- Edit lewat GitHub Codespaces terminal di HP; build APK via GitHub Actions (`.github/workflows/android-build.yml`).
+- **ATURAN PASTE:** Pecah paste maks ~80–100 baris (`>` lalu `>>`) dan kirim 1 sub-fase per giliran chat agar terminal HP tidak macet.
+- Stack: `compileSdk = 36`, `targetSdk = 36`, `minSdk = 24`, AGP `8.9.1`, Gradle `8.14.3`, JDK `17`, Kotlin `2.0.20`, KSP `2.0.20-1.0.25`, CameraX `1.4.2`, ML Kit `17.3.0`.
 
-## 3. Progress Saat Ini
+## 3. Struktur Paket Aktif (`com.iyonzkasir`)
+- `MainActivity.kt` (`IyonzApp`, `MainActivity`, `IyonzRoot`, `MainShell`)
+- `core/`: `Access.kt`, `Formatters.kt`, `Security.kt`, `SessionManager.kt`, `Theme.kt`
+- `data/local/`: `Entities.kt`, `CatalogDaos.kt`, `OrderDaos.kt`, `FinanceDaos.kt`, `IyonzDatabase.kt`
+- `data/remote/`: `ImageHelper.kt`, `CloudGateway.kt`, `FirebaseAuthCatalog.kt`, `FirebaseSalesSync.kt`, `SyncCoordinator.kt`
+- `data/repo/`: `CatalogRepository.kt`, `FinanceAndCrmRepos.kt`, `OrderRepository.kt`, `PrefRepository.kt`, `StockRepository.kt`, `TeamRepository.kt`
+- `di/`: `AppContainer.kt`
+- `hardware/`: `AppSound.kt`, `ReceiptFormatter.kt`, `ScannerDialog.kt`, `ThermalPrinter.kt`
+- `ui/auth/`: `AuthEntryScreen.kt`, `DeviceOutletPickerScreen.kt`, `StaffPinScreen.kt`
+- `ui/home/`: `HomeV2Screen.kt`
+- `ui/pos/`: `PosV2State.kt`, `PosV2Screen.kt`, `PosCheckoutScreen.kt`, `OrderSuccessV2Screen.kt`
+- `ui/activity/`: `ActivityHubV2Screen.kt`, `KitchenV2Screen.kt`, `OrdersHistoryV2Screen.kt`, `KasbonAndCrmV2Screen.kt`, `WebOrdersV2Screen.kt`
+- `ui/manage/`: `ManageHubV2Screen.kt`, `CatalogManageV2Screen.kt`, `CatalogDialogs.kt`, `BundleManageV2Screen.kt`, `ExpenseV2Screen.kt`, `ReportV2Screen.kt`, `ShiftV2Screen.kt`, `TeamManageV2Screen.kt`, `WebStoreV2Screen.kt`, `PrinterAndReceiptV2Screen.kt`, `SettingsAndBackupV2Screen.kt`, `V2BackupHelper.kt`
+
+## 4. Progress Saat Ini
 - [x] Langkah 1: CI Workflow + SDK 36 + Manifest + ProGuard
-- [x] Langkah 2: `core/` (`Theme.kt`, `Formatters.kt`, `Access.kt`, `Security.kt`, `SessionManager.kt`)
-- [x] Langkah 3: `data/local/` (`Entities.kt`, `CatalogDaos.kt`, `OrderDaos.kt`, `FinanceDaos.kt`, `IyonzDatabase.kt`)
-- [x] Langkah 4A: `data/remote/` (`ImageHelper.kt`, `CloudGateway.kt`, `FirebaseAuthCatalog.kt`, `FirebaseSalesSync.kt`)
+- [x] Langkah 2: `core/`
+- [x] Langkah 3: `data/local/`
+- [x] Langkah 4A: `data/remote/`
 - [x] Langkah 4B: `data/repo/` + `SyncCoordinator.kt`
 - [x] Langkah 5: `di/AppContainer.kt`, `ui/auth/*`, `ui/home/HomeV2Screen.kt`
-- [x] Langkah 6A: `hardware/*` + `ui/pos/*` (POS, Bundling, Checkout, Sukses, Struk)
-- [x] Langkah 6B: `ui/activity/*` (Dapur, Open Bill & Riwayat, Kasbon & Member, Web Orders)
-- [x] Langkah 6C-1: `ui/manage/` bagian 1 (Produk/Kategori/Stok, Paket, Pengeluaran, Shift, Laporan+CSV)
-- [x] Langkah 6C-2: `ui/manage/` bagian 2 (Cabang & Karyawan Custom, Web QR, Printer/Tema/Backup, ManageHub)
-- [ ] Langkah 6D: Sambungkan `MainActivity.kt` & `IyonzApp` ke UI v2 + hapus file lama -> APK v2 siap instal!
-- [ ] Langkah 7: Update `web/index.html` + `firestore.rules` + setup Firebase Console + tes APK
+- [x] Langkah 6A: `hardware/*` + `ui/pos/*`
+- [x] Langkah 6B: `ui/activity/*`
+- [x] Langkah 6C-1: `ui/manage/` bagian 1
+- [x] Langkah 6C-2: `ui/manage/` bagian 2 (termasuk `WebStoreV2Screen.kt`)
+- [x] Langkah 6D: Sambungkan `MainActivity.kt` & `IyonzApp` ke UI v2 + hapus file v1 lama (Build CI Hijau!)
+- [ ] Langkah 7: Update `web/index.html` (Paket Bundling, pajak `pajakPersen`, foto Data URI) + buat `firestore.rules` + setup Firebase Console + tes APK v2
